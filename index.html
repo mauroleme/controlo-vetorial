@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controlo vetorial em 3D</title>
+<style>
+/* Plano: o motor 3D à esquerda, os comandos e as duas barras à direita.
+   Cores dos vetores iguais às dos slides da semana 8: fluxo verde, id laranja, iq azul, is vermelho. */
+:root{
+  color-scheme: light;
+  --page:#f6f7f5; --surface:#fdfdfc; --ink:#14161a; --ink2:#4f545c; --muted:#8a8f97;
+  --grid:#e2e4e0; --axis:#c4c7c1; --border:rgba(20,22,26,.11); --stator:#e4e5e0; --hover:rgba(20,22,26,.05);
+  --flux:#2e7d5b; --id:#b9770e; --iq:#2a6099; --is:#c0392b; --copper:#b5652a; --mid:#eceee9;
+  --body:system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --page:#0f1012; --surface:#191b1e; --ink:#eef0f2; --ink2:#c2c6cc; --muted:#8a8f97;
+    --grid:#2a2d31; --axis:#3a3e44; --border:rgba(255,255,255,.11); --stator:#2a2c30; --hover:rgba(255,255,255,.06);
+    --flux:#4cb386; --id:#e0a53c; --iq:#5b9be0; --is:#e8665a; --copper:#d98a4e; --mid:#2c2f33;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --page:#0f1012; --surface:#191b1e; --ink:#eef0f2; --ink2:#c2c6cc; --muted:#8a8f97;
+  --grid:#2a2d31; --axis:#3a3e44; --border:rgba(255,255,255,.11); --stator:#2a2c30; --hover:rgba(255,255,255,.06);
+  --flux:#4cb386; --id:#e0a53c; --iq:#5b9be0; --is:#e8665a; --copper:#d98a4e; --mid:#2c2f33;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--ink);font:15px/1.5 var(--body);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1320px;margin:0 auto;padding:18px 16px 32px}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px 20px;flex-wrap:wrap}
+.langbtn{font-weight:600;padding:6px 14px;flex:none}
+h1{font-size:22px;margin:0 0 4px;font-weight:650;text-wrap:balance}
+.sub{color:var(--ink2);margin:0 0 14px;max-width:70ch}
+.cid{color:var(--id)} .ciq{color:var(--iq)} .cflux{color:var(--flux)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,1fr);gap:16px;align-items:start}
+@media (max-width:900px){.layout{grid-template-columns:1fr}}
+.side{display:flex;flex-direction:column;gap:16px}
+
+/* motor */
+.caprow{display:flex;justify-content:space-between;align-items:baseline;gap:8px 16px;flex-wrap:wrap;font-size:13px}
+#capView{font-weight:600}
+.hint{color:var(--muted);font-size:12px}
+#motor{width:100%;aspect-ratio:1/1;display:block;touch-action:none;cursor:grab;margin-top:4px}
+#motor:active{cursor:grabbing}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px;color:var(--ink2);margin-top:6px}
+.legend>span{display:inline-flex;align-items:center;gap:6px}
+.sw{display:inline-block;width:20px;height:0;border-top:3px solid currentColor;border-radius:2px}
+.sw.band{border-top-width:8px;opacity:.5}
+.sw.ring{width:22px;height:8px;border:0;border-radius:4px;background:linear-gradient(90deg,var(--mid),var(--flux),var(--mid))}
+
+/* comandos */
+.controls{display:flex;flex-direction:column;gap:16px}
+.ctl{display:flex;flex-direction:column;gap:5px}
+.lblrow{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.lblrow label,.lbl{font-size:13.5px;font-weight:600}
+.lblrow output{font-variant-numeric:tabular-nums;font-size:14px;font-weight:600}
+.c-id label,.c-id output{color:var(--id)}
+.c-iq label,.c-iq output{color:var(--iq)}
+input[type=range]{width:100%;margin:0;accent-color:var(--ink2);cursor:pointer}
+#id{accent-color:var(--id)} #iq{accent-color:var(--iq)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.note{font-size:12.5px;color:var(--ink2)}
+button{font:inherit;font-size:13.5px;color:var(--ink);background:var(--surface);border:1px solid var(--axis);border-radius:8px;padding:5px 12px;cursor:pointer}
+button:hover{background:var(--hover)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--iq);outline-offset:2px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button.on{border-color:var(--ink);font-weight:600}
+#fix.on{border-color:var(--ink);background:var(--ink);color:var(--surface)}
+
+/* barras */
+.out{display:flex;flex-direction:column;gap:14px}
+.barhead{display:flex;justify-content:space-between;align-items:baseline;font-size:13.5px;font-weight:600;margin-bottom:5px}
+.barhead output{font-variant-numeric:tabular-nums}
+.track{position:relative;height:16px;background:var(--mid);border-radius:8px;overflow:hidden}
+.fill{position:absolute;top:0;bottom:0;left:0;border-radius:8px}
+.fill.flux{background:var(--flux)}
+.fill.torque{background:var(--is)}
+.fill.speed{background:var(--ink2)}
+.tick{position:absolute;top:-2px;bottom:-2px;width:3px;background:var(--id);border-radius:2px;transform:translateX(-1.5px)}
+.zero{position:absolute;top:0;bottom:0;left:50%;width:1px;background:var(--axis)}
+.scale{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums}
+.verdict{margin:2px 0 0;padding:10px 12px;border-left:4px solid var(--axis);background:var(--page);border-radius:4px;font-size:14px;min-height:3.2em}
+.verdict[data-k="ok"]{border-left-color:var(--flux)}
+.verdict[data-k="wait"]{border-left-color:var(--id)}
+.verdict[data-k="none"]{border-left-color:var(--muted)}
+.verdict[data-k="brake"]{border-left-color:var(--is)}
+
+h3{font-size:14.5px;margin:0 0 6px;font-weight:650}
+ol{margin:0;padding-left:20px} li{margin:5px 0;font-size:14px}
+.foot{font-size:12px;color:var(--muted);margin-top:14px;max-width:90ch}
+@media (prefers-reduced-motion: reduce){ *{scroll-behavior:auto} }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <div>
+    <h1 data-t="h1">Controlo vetorial: dois comandos separados</h1>
+    <p class="sub" data-t="sub">Motor de indução com rotor em gaiola. O variador manda duas correntes: <b class="cid">i<sub>d</sub></b> faz o fluxo e <b class="ciq">i<sub>q</sub></b> faz o binário. Como no motor DC, mexer numa não mexe na outra.</p>
+  </div>
+  <button id="lang" type="button" class="langbtn">English</button>
+</header>
+
+<div class="layout">
+  <div class="card">
+    <div class="caprow"><span id="capView"></span><span class="hint" data-t="hint">Arrasta para rodar · roda do rato aproxima · duplo clique repõe</span></div>
+    <canvas id="motor" role="img" aria-label="Motor de indução em 3D com o fluxo do rotor e as correntes id, iq e is desenhados na face da frente"></canvas>
+    <div class="legend">
+      <span><span class="sw band" style="color:var(--flux)"></span><span data-t="lg1">φ<sub>r</sub> fluxo do rotor</span></span>
+      <span><span class="sw" style="color:var(--id)"></span><span data-t="lg2">i<sub>d</sub> faz o fluxo</span></span>
+      <span><span class="sw" style="color:var(--iq)"></span><span data-t="lg3">i<sub>q</sub> faz o binário</span></span>
+      <span><span class="sw" style="color:var(--is)"></span><span data-t="lg4">i<sub>s</sub> corrente total do estator</span></span>
+    </div>
+    <div class="legend">
+      <span><span class="sw" style="color:var(--copper)"></span><span data-t="lg5">bobinas a, b, c: mais claras = mais corrente</span></span>
+      <span><span class="sw ring"></span><span data-t="lg6">entreferro: onde o fluxo está (N e S)</span></span>
+    </div>
+    <div class="legend">
+      <span><span class="sw" style="color:var(--ink2)"></span><span data-t="lg7">seta curva de cima: sentido da rotação</span></span>
+      <span><span class="sw" style="color:var(--is)"></span><span data-t="lg8">seta curva de fora: sentido do binário</span></span>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="card controls">
+      <div class="ctl">
+        <div class="lblrow"><label for="spd" data-t="spdL">Velocidade da animação</label><output id="spdOut"></output></div>
+        <input id="spd" type="range" min="0" max="1" step="0.01" value="1">
+        <div class="row"><button id="fix" type="button">Fixar o vetor</button><span class="note" data-t="fixNote">Em 0 tudo pára e o vetor fica fixo. A tecla espaço faz o mesmo.</span></div>
+      </div>
+      <div class="ctl c-id">
+        <div class="lblrow"><label for="id" data-t="idL">Fluxo · i<sub>d</sub></label><output id="idOut"></output></div>
+        <input id="id" type="range" min="0" max="100" step="1" value="70">
+      </div>
+      <div class="ctl c-iq">
+        <div class="lblrow"><label for="iq" data-t="iqL">Binário · i<sub>q</sub></label><output id="iqOut"></output></div>
+        <input id="iq" type="range" min="-100" max="100" step="1" value="60">
+      </div>
+      <div class="ctl">
+        <span class="lbl" data-t="viewL">Ver a partir de</span>
+        <div class="seg"><button id="vS" type="button" class="on" data-t="vS">Estator (parado)</button><button id="vF" type="button" data-t="vF">Fluxo (eixos d, q)</button></div>
+      </div>
+      <div class="ctl">
+        <span class="lbl" data-t="camL">Câmara</span>
+        <div class="seg"><button id="c3d" type="button" class="on">3D</button><button id="cFr" type="button" data-t="cFr">De frente</button></div>
+      </div>
+    </div>
+
+    <div class="card out">
+      <div>
+        <div class="barhead"><span class="cflux" data-t="phiL">Fluxo do rotor φ<sub>r</sub></span><output id="phiOut"></output></div>
+        <div class="track"><div class="fill flux" id="phiBar"></div><div class="tick" id="phiTick" title="o valor que o id está a pedir"></div></div>
+        <div class="scale"><span>0</span><span data-t="phiScale">traço laranja = o que o i<sub>d</sub> pede</span><span data-t="p100">100 %</span></div>
+      </div>
+      <div>
+        <div class="barhead"><span data-t="tL">Binário T = k · φ<sub>r</sub> · i<sub>q</sub></span><output id="tOut"></output></div>
+        <div class="track"><div class="zero"></div><div class="fill torque" id="tBar"></div></div>
+        <div class="scale"><span data-t="m100">−100 %</span><span>0</span><span data-t="pp100">+100 %</span></div>
+      </div>
+      <div>
+        <div class="barhead"><span data-t="wL">Velocidade do rotor</span><output id="wOut"></output></div>
+        <div class="track"><div class="zero"></div><div class="fill speed" id="wBar"></div></div>
+        <div class="scale"><span data-t="wRev">ao contrário</span><span>0</span><span data-t="wFwd">para a frente</span></div>
+      </div>
+      <p class="verdict" id="verdict" data-k="ok"></p>
+    </div>
+
+    <div class="card">
+      <h3 data-t="tryH">Experimenta</h3>
+      <ol>
+        <li data-t="try1">Carrega em <b>Fixar o vetor</b> e mexe só no <b class="ciq">i<sub>q</sub></b>: a corrente total roda e cresce, o fluxo não se mexe e o binário acompanha logo.</li>
+        <li data-t="try2">Volta a pôr a andar e passa o <b class="ciq">i<sub>q</sub></b> para negativo: as duas setas por cima do motor ficam opostas e o motor trava. Como o eixo está livre, pára e depois roda ao contrário.</li>
+        <li data-t="try3">Mexe no <b class="cid">i<sub>d</sub></b>: o fluxo vai devagar até ao traço laranja, e o binário vai atrás dele. É por isso que o variador deixa o i<sub>d</sub> quieto.</li>
+        <li data-t="try4">Escolhe <b>Ver a partir do fluxo</b>: o motor roda, mas i<sub>d</sub> e i<sub>q</sub> ficam parados. É isto que a transformada de Park dá ao controlador.</li>
+        <li data-t="try5">Põe o <b class="cid">i<sub>d</sub></b> a 0: sem fluxo, nenhum i<sub>q</sub> faz binário e o motor vai parando.</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<p class="foot" data-t="foot">Versão simplificada de park_inducao_3d.html · valores em % do nominal · eixo livre, só com atrito: a velocidade sai de J·dω/dt = T − T<sub>atrito</sub> · o fluxo segue o i<sub>d</sub> com atraso τ<sub>r</sub> = L<sub>r</sub>/R<sub>r</sub> (aqui mais lento do que num motor real, para se ver) · 1 par de polos.</p>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const SQ3 = Math.sqrt(3), TAU = 2 * Math.PI, DEG = Math.PI / 180;
+const mod = (x, m) => ((x % m) + m) % m;
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+
+// ---------- modelo, em % do nominal (1 = 100 %) ----------
+const TAU_R = 0.6;     // s: o fluxo do rotor segue o id com este atraso (exagerado para se ver)
+const J = 1.8;         // inércia (unidades do desenho): quanto custa mudar a velocidade
+const B = 1.2;         // atrito viscoso: em regime, velocidade = T / B (voltas por segundo no ecrã)
+const W_MAX = 1 / B;   // velocidade com 100 % de binário
+const K = 0.40;        // comprimento das correntes no desenho, por 100 %
+const KF = 0.58;       // comprimento do fluxo no desenho, por 100 % (chega ao entreferro)
+
+const st = { tscale: 1, saved: 1, id: 0.70, iq: 0.60, frame: false };
+let reduce = false;
+try { reduce = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+if (reduce) st.tscale = 0;
+let theta = 0.35, thetaR = 0.35, phi = st.id;
+
+// correntes nas três fases a partir de id, iq (Park e Clarke inversos)
+function phases(th, id, iq) {
+  const c = Math.cos(th), s = Math.sin(th);
+  const al = id * c - iq * s, be = id * s + iq * c;
+  return { ia: al, ib: -0.5 * al + SQ3 / 2 * be, ic: -0.5 * al - SQ3 / 2 * be };
+}
+const torque = () => phi * st.iq;
+let omega = torque() / B;   // velocidade do rotor (voltas/s no ecrã); começa em regime
+// escorregamento (voltas/s): o campo anda à frente da gaiola no sentido do binário
+const slipRev = () => clamp(0.06 * st.iq / Math.max(phi, 0.15), -0.3, 0.3);
+
+// a velocidade não é comandada: sai do binário contra o atrito, J·dω/dt = T − B·ω
+function step(dt) {
+  if (dt <= 0) return;
+  phi += (st.id - phi) * (1 - Math.exp(-dt / TAU_R));
+  omega += (torque() - B * omega) / J * dt;
+  thetaR = mod(thetaR + TAU * omega * dt, TAU);
+  theta = mod(theta + TAU * (omega + slipRev()) * dt, TAU);
+}
+
+// ---------- cores ----------
+let C = {}, RGB = {};
+const KEYS = ['page', 'surface', 'ink', 'ink2', 'muted', 'grid', 'axis', 'stator', 'flux', 'id', 'iq', 'is', 'copper', 'mid'];
+function toRGB(c) {
+  c = c.trim();
+  if (c[0] === '#') { const n = parseInt(c.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+  return c.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number);
+}
+const mixRGB = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+const css = a => `rgb(${a.map(Math.round).join(',')})`;
+const mix = (h1, h2, t) => css(mixRGB(toRGB(h1), toRGB(h2), t));
+function readColors() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of KEYS) { C[k] = cs.getPropertyValue('--' + k).trim(); RGB[k] = toRGB(C[k]); }
+}
+const FONT = 'system-ui,-apple-system,"Segoe UI",sans-serif';
+
+// ---------- línguas: o português está no HTML; o inglês está aqui ----------
+const EN = {
+  h1: 'Vector control: two separate commands',
+  sub: 'Squirrel-cage induction motor. The drive sends two currents: <b class="cid">i<sub>d</sub></b> builds the flux and <b class="ciq">i<sub>q</sub></b> makes the torque. As in a DC motor, changing one does not change the other.',
+  hint: 'Drag to rotate · scroll to zoom · double-click to reset',
+  lg1: 'φ<sub>r</sub> rotor flux',
+  lg2: 'i<sub>d</sub> builds the flux',
+  lg3: 'i<sub>q</sub> makes the torque',
+  lg4: 'i<sub>s</sub> total stator current',
+  lg5: 'coils a, b, c: brighter = more current',
+  lg6: 'air gap: where the flux is (N and S)',
+  lg7: 'upper curved arrow: direction of rotation',
+  lg8: 'outer curved arrow: direction of torque',
+  spdL: 'Animation speed',
+  fixNote: 'At 0 everything stops and the vector stays frozen. The space bar does the same.',
+  idL: 'Flux · i<sub>d</sub>',
+  iqL: 'Torque · i<sub>q</sub>',
+  viewL: 'View from',
+  vS: 'Stator (stationary)',
+  vF: 'Flux (d, q axes)',
+  camL: 'Camera',
+  cFr: 'Front',
+  phiL: 'Rotor flux φ<sub>r</sub>',
+  phiScale: 'orange mark = what i<sub>d</sub> asks for',
+  p100: '100%', m100: '−100%', pp100: '+100%',
+  tL: 'Torque T = k · φ<sub>r</sub> · i<sub>q</sub>',
+  wL: 'Rotor speed',
+  wRev: 'reverse',
+  wFwd: 'forward',
+  tryH: 'Try this',
+  try1: 'Press <b>Freeze the vector</b> and move only <b class="ciq">i<sub>q</sub></b>: the total current turns and grows, the flux does not move and the torque follows at once.',
+  try2: 'Let it run again and take <b class="ciq">i<sub>q</sub></b> below zero: the two arrows above the motor point opposite ways and the motor brakes. With a free shaft it stops and then turns the other way.',
+  try3: 'Move <b class="cid">i<sub>d</sub></b>: the flux slowly climbs to the orange mark and the torque follows it. That is why the drive leaves i<sub>d</sub> alone.',
+  try4: 'Choose <b>View from the flux</b>: the motor turns, but i<sub>d</sub> and i<sub>q</sub> stand still. This is what the Park transformation gives the controller.',
+  try5: 'Set <b class="cid">i<sub>d</sub></b> to 0: with no flux, no i<sub>q</sub> makes torque and the motor slows down.',
+  foot: 'Simplified version of park_inducao_3d.html · values in % of rated · free shaft with friction only: speed comes from J·dω/dt = T − T<sub>friction</sub> · the flux follows i<sub>d</sub> with the delay τ<sub>r</sub> = L<sub>r</sub>/R<sub>r</sub> (slower here than in a real motor, so you can see it) · 1 pole pair.'
+};
+const STR = {
+  pt: {
+    title: 'Controlo vetorial em 3D', langBtn: 'English', langAria: 'Mudar o texto para inglês',
+    aria: 'Motor de indução em 3D com o fluxo do rotor e as correntes id, iq e is desenhados na face da frente',
+    tick: 'o valor que o id está a pedir',
+    fix: 'Fixar o vetor', resume: 'Voltar a andar', stopped: 'parado · vetor fixo',
+    capFixed: 'Vetor fixo (animação parada)',
+    capFlux: 'Vista do fluxo: d e q parados, o motor roda por baixo',
+    capStator: 'Vista do estator: o campo e os vetores rodam',
+    wait: 'O fluxo ainda está a mudar e o binário vai atrás dele. É lento (τr), por isso o variador não mexe no id para pedir binário.',
+    noFlux: 'Sem fluxo não há binário: o iq sozinho não faz nada, e o motor vai parando.',
+    coast: 'Binário zero: o motor só tem atrito e vai parando sozinho.',
+    idle: 'Parado e sem binário.',
+    brake: 'Binário contra o movimento: o motor está a travar. Funciona como gerador e devolve energia ao barramento DC.',
+    reversed: 'O motor parou e já roda ao contrário: com o eixo livre, binário negativo acaba por inverter o sentido.',
+    accel: 'Há mais binário do que atrito: o motor acelera até os dois se igualarem.',
+    decel: 'Há menos binário do que atrito: o motor abranda até os dois se igualarem.',
+    steady: 'Em regime: o binário iguala o atrito e a velocidade fica constante. O fluxo não se mexe.'
+  },
+  en: {
+    title: 'Vector control in 3D', langBtn: 'Português', langAria: 'Switch the text to Portuguese',
+    aria: '3D induction motor with the rotor flux and the currents id, iq and is drawn on the front face',
+    tick: 'the value id is asking for',
+    fix: 'Freeze the vector', resume: 'Resume', stopped: 'stopped · vector frozen',
+    capFixed: 'Vector frozen (animation stopped)',
+    capFlux: 'View from the flux: d and q stand still, the motor turns underneath',
+    capStator: 'View from the stator: the field and the vectors rotate',
+    wait: 'The flux is still changing and the torque follows it. It is slow (τr), so the drive does not use id to ask for torque.',
+    noFlux: 'No flux, no torque: iq alone does nothing, and the motor slows down.',
+    coast: 'Zero torque: only friction is left, so the motor slows down by itself.',
+    idle: 'Stopped, with no torque.',
+    brake: 'Torque against the motion: the motor is braking. It works as a generator and sends energy back to the DC bus.',
+    reversed: 'The motor stopped and now turns the other way: with a free shaft, negative torque ends up reversing it.',
+    accel: 'More torque than friction: the motor speeds up until the two are equal.',
+    decel: 'Less torque than friction: the motor slows down until the two are equal.',
+    steady: 'Steady state: torque equals friction and the speed is constant. The flux does not move.'
+  }
+};
+let lang = 'pt';
+try { if (location.hash === '#en') lang = 'en'; else if (localStorage.getItem('cv-lang') === 'en') lang = 'en'; } catch (e) {}
+const tr = k => STR[lang][k];
+const pct = v => (v < 0 ? '−' : '') + Math.round(Math.abs(v) * 100) + (lang === 'en' ? '%' : ' %');
+
+// ---------- desenho 2D de apoio ----------
+function fit(cv) {
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr));
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return [g, r.width, r.height];
+}
+function line(g, x0, y0, x1, y1) { g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); }
+function poly(g, pts, close = true) { g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); if (close) g.closePath(); }
+function label(g, txt, x, y, color, size = 13, weight = 400) {
+  g.font = `${weight} ${size}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineWidth = 4; g.lineJoin = 'round'; g.strokeStyle = C.surface; g.strokeText(txt, x, y);
+  g.fillStyle = color; g.fillText(txt, x, y);
+}
+// letra com índice (i_d, φ_r), centrada em (x, y)
+function labelSub(g, base, sub, x, y, color, size = 15) {
+  const fb = `600 ${size}px ${FONT}`, fs = `600 ${Math.round(size * 0.72)}px ${FONT}`;
+  g.font = fb; const wb = g.measureText(base).width;
+  g.font = fs; const ws = g.measureText(sub).width;
+  const x0 = x - (wb + ws) / 2;
+  g.textAlign = 'left'; g.textBaseline = 'middle'; g.lineJoin = 'round'; g.lineWidth = 4; g.strokeStyle = C.surface;
+  g.font = fb; g.strokeText(base, x0, y);
+  g.font = fs; g.strokeText(sub, x0 + wb, y + size * 0.32);
+  g.fillStyle = color;
+  g.font = fb; g.fillText(base, x0, y);
+  g.font = fs; g.fillText(sub, x0 + wb, y + size * 0.32);
+}
+function arrow(g, [x0, y0], [x1, y1], color, w, halo) {
+  const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy);
+  if (L < 3) return;
+  const ux = dx / L, uy = dy / L, hl = Math.min(10 + 1.2 * w, L * 0.5), hw = Math.max(hl * 0.5, w * 0.95);
+  const head = () => { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x1 - ux * hl - uy * hw, y1 - uy * hl + ux * hw); g.lineTo(x1 - ux * hl + uy * hw, y1 - uy * hl - ux * hw); g.closePath(); };
+  g.lineCap = 'round';
+  if (halo) {
+    g.strokeStyle = C.surface; g.lineWidth = w + 4; line(g, x0, y0, x1 - ux * hl * 0.7, y1 - uy * hl * 0.7);
+    head(); g.lineWidth = 4; g.lineJoin = 'round'; g.stroke();
+  }
+  g.strokeStyle = color; g.lineWidth = w; line(g, x0, y0, x1 - ux * hl * 0.7, y1 - uy * hl * 0.7);
+  head(); g.fillStyle = color; g.fill();
+}
+
+// ---------- geometria do motor (raio exterior do estator ≈ 1; z = eixo do veio, + para a frente) ----------
+const GEO = { Rso: 0.98, Rb: 0.64, Rs: 0.74, Rsb: 0.84, sh: 8 * DEG, L: 0.7, Rr: 0.52, Rbar: 0.455, Lb: 0.76, Nb: 18, Rsh: 0.07, zF: 1.35, zB: -0.98 };
+const SLOTS = [['a', 90, 1], ['a', 270, -1], ['b', 210, 1], ['b', 30, -1], ['c', 330, 1], ['c', 150, -1]];
+const PHASES = [['a', 0], ['b', 120], ['c', 240]];
+const cart = ([r, a, z]) => [r * Math.cos(a), r * Math.sin(a), z];
+
+function coilPath(ix, axis) {
+  const f1 = axis + Math.PI / 2, f2 = axis - Math.PI / 2, e = 0.12 + 0.08 * ix, re = GEO.Rs + 0.05 + 0.04 * ix, N = 30, pts = [];
+  for (let k = 0; k < 6; k++) pts.push([GEO.Rs, f1, -GEO.L + 2 * GEO.L * k / 6]);
+  for (let k = 0; k < N; k++) { const u = k / N, s = Math.sin(Math.PI * u); pts.push([GEO.Rs + (re - GEO.Rs) * s, f1 + (f2 - f1) * u, GEO.L + e * s]); }
+  for (let k = 0; k < 6; k++) pts.push([GEO.Rs, f2, GEO.L - 2 * GEO.L * k / 6]);
+  for (let k = 0; k < N; k++) { const u = k / N, s = Math.sin(Math.PI * u); pts.push([GEO.Rs + (re - GEO.Rs) * s, f2 + (f1 - f2) * u, -GEO.L - e * s]); }
+  return pts;
+}
+const COILS = PHASES.map(([ph, a], ix) => {
+  const pts = coilPath(ix, a * DEG), cum = [0];
+  for (let k = 1; k <= pts.length; k++) {
+    const p = cart(pts[k - 1]), q = cart(pts[k % pts.length]);
+    cum.push(cum[k - 1] + Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]));
+  }
+  return { ph, pts, cum, len: cum[pts.length], s: 0 };
+});
+function pointAt(cl, d) {
+  let lo = 0, hi = cl.pts.length;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (cl.cum[m] <= d) lo = m; else hi = m; }
+  const p = cl.pts[lo], q = cl.pts[(lo + 1) % cl.pts.length], u = (d - cl.cum[lo]) / ((cl.cum[lo + 1] - cl.cum[lo]) || 1);
+  return [p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u, p[2] + (q[2] - p[2]) * u];
+}
+const INNER = (() => {
+  const sl = SLOTS.map(s => s[1] * DEG).sort((x, y) => x - y), pts = [];
+  sl.forEach((a, k) => {
+    const a0 = a - GEO.sh, a1 = a + GEO.sh, nxt = (k + 1 < sl.length ? sl[k + 1] : sl[0] + TAU) - GEO.sh;
+    pts.push([GEO.Rb, a0], [GEO.Rsb, a0], [GEO.Rsb, a1], [GEO.Rb, a1]);
+    for (let b = a1 + 4 * DEG; b < nxt; b += 4 * DEG) pts.push([GEO.Rb, b]);
+  });
+  return pts;
+})();
+const barS = new Array(GEO.Nb).fill(0);
+
+// ---------- câmara ----------
+const CAM3D = { yaw: 0.62, pitch: 0.34, zoom: 1 }, CAMFR = { yaw: 0, pitch: 0, zoom: 1 };
+const cam = { ...CAM3D, D: 6 };
+let camTarget = null;
+function camera(W, H) {
+  const cyw = Math.cos(cam.yaw), syw = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  const S = Math.min(W, H) * 0.33 * cam.zoom, cx = W / 2, cy = H / 2;
+  const off = st.frame ? theta : 0, co = Math.cos(off), so = Math.sin(off);
+  const pc = (x, y, z) => {
+    const xr = x * co + y * so, yr = -x * so + y * co;
+    const x1 = xr * cyw + z * syw, z1 = -xr * syw + z * cyw;
+    const y2 = yr * cp - z1 * sp, z2 = yr * sp + z1 * cp, k = cam.D / (cam.D - z2);
+    return [cx + x1 * k * S, cy - y2 * k * S, z2, k];
+  };
+  return { pc, py: (r, a, z) => pc(r * Math.cos(a), r * Math.sin(a), z), S };
+}
+
+// ---------- desenho do motor ----------
+const mcv = $('#motor');
+const WHITE = [255, 255, 255];
+
+function drawMotor(cur, dt) {
+  const [g, W, H] = fit(mcv);
+  g.clearRect(0, 0, W, H);
+  const { pc, py, S } = camera(W, H);
+  const zf = GEO.L + 0.002;
+  const P2 = (r, a) => py(r, a, zf).slice(0, 2), XY = (x, y) => pc(x, y, zf).slice(0, 2);
+  const DQ = (d, q) => XY(d * Math.cos(theta) - q * Math.sin(theta), d * Math.sin(theta) + q * Math.cos(theta));
+  const fade = z => clamp((0.6 - z) * 0.3, 0, 0.55);
+  const shade = (rgb, z) => css(mixRGB(rgb, RGB.surface, fade(z)));
+  const items = [];
+  const seg = (p, q, w, rgb, front) => items.push({ p, q, w, rgb, z: (p[2] + q[2]) / 2, front });
+  const dot = (p, r, front) => items.push({ p, r, z: p[2] + 0.03, front });
+  const ipk = Math.max(Math.hypot(st.id, st.iq), 0.3);
+  const dts = dt;   // já vem multiplicado pela velocidade da animação
+
+  // núcleo do estator: face de trás e linhas ao comprimento
+  const ax = RGB.axis;
+  for (let k = 0; k < 72; k++) seg(py(GEO.Rso, k * 5 * DEG, -GEO.L), py(GEO.Rso, (k + 1) * 5 * DEG, -GEO.L), 1, ax, false);
+  for (let k = 0; k < INNER.length; k++) { const p = INNER[k], q = INNER[(k + 1) % INNER.length]; seg(py(p[0], p[1], -GEO.L), py(q[0], q[1], -GEO.L), 1, ax, false); }
+  for (let k = 0; k < 24; k++) { const a = k * 15 * DEG; seg(py(GEO.Rso, a, -GEO.L), py(GEO.Rso, a, GEO.L), 1, ax, false); }
+  for (const [, a] of SLOTS) for (const s of [-1, 1]) { const b = a * DEG + s * GEO.sh; seg(py(GEO.Rb, b, -GEO.L), py(GEO.Rb, b, GEO.L), 1, ax, false); }
+
+  // bobinas (mais claras = mais corrente) e pontos a andar no sentido da corrente
+  for (const cl of COILS) {
+    const i = cur['i' + cl.ph], t = Math.min(1, Math.abs(i) / ipk);
+    const rgb = mixRGB(RGB.surface, RGB.copper, 0.25 + 0.75 * t), n = cl.pts.length;
+    const P3 = cl.pts.map(([r, a, z]) => py(r, a, z));
+    for (let k = 0; k < n; k++) seg(P3[k], P3[(k + 1) % n], 7, rgb, (cl.pts[k][2] + cl.pts[(k + 1) % n][2]) / 2 > GEO.L + 1e-3);
+    cl.s = mod(cl.s + dts * 1.1 * i / ipk, cl.len);
+    if (t > 0.05) for (let d = cl.s % 0.42; d < cl.len; d += 0.42) { const q = pointAt(cl, d); dot(py(...q), 2.4, q[2] > GEO.L + 1e-3); }
+  }
+
+  // gaiola: corrente nas barras proporcional ao iq, máxima debaixo dos polos
+  const ibRef = Math.max(ipk, 0.3);
+  const zs = [-GEO.Lb, -0.38, 0, 0.38, GEO.L, GEO.Lb];
+  for (let b = 0; b < GEO.Nb; b++) {
+    const a = thetaR + TAU * b / GEO.Nb, ib = st.iq * Math.cos(a - theta), t = Math.min(1, Math.abs(ib) / ibRef);
+    const rgb = mixRGB(RGB.axis, RGB.ink, 0.15 + 0.75 * t);
+    for (let k = 0; k < zs.length - 1; k++) seg(py(GEO.Rbar, a, zs[k]), py(GEO.Rbar, a, zs[k + 1]), 4.5, rgb, zs[k] >= GEO.L);
+    barS[b] = mod(barS[b] + dts * 1.2 * ib / ibRef, 2 * GEO.Lb);
+    if (t > 0.08) for (let m = 0; m < 2; m++) { const z = -GEO.Lb + mod(barS[b] + m * GEO.Lb, 2 * GEO.Lb); dot(py(GEO.Rbar, a, z), 1.9, z > GEO.L); }
+  }
+  const ringRGB = mixRGB(RGB.axis, RGB.ink, 0.4);
+  for (const z of [-GEO.Lb, GEO.Lb]) for (let k = 0; k < 48; k++) {
+    const a0 = thetaR + k * TAU / 48, a1 = a0 + TAU / 48;
+    seg(py(GEO.Rbar, a0, z), py(GEO.Rbar, a1, z), 6, ringRGB, z > 0);
+  }
+  // veio, com uma marca na ponta para se ver a gaiola a rodar
+  const shRGB = mixRGB(RGB.axis, RGB.ink2, 0.35);
+  for (let z = GEO.zB; z < GEO.zF - 1e-6; z += 0.2325) seg(pc(0, 0, z), pc(0, 0, Math.min(GEO.zF, z + 0.2325)), 2 * GEO.Rsh * S, shRGB, z + 0.1 > GEO.L);
+  const endPts = [];
+  for (let k = 0; k < 24; k++) endPts.push(py(GEO.Rsh, k * TAU / 24, GEO.zF));
+  items.push({ end: endPts, key: [pc(0, 0, GEO.zF), py(GEO.Rsh, thetaR, GEO.zF)], z: pc(0, 0, GEO.zF)[2] + 0.05, front: true });
+
+  const drawIt = it => {
+    if (it.end) {
+      poly(g, it.end); g.fillStyle = mix(C.stator, C.ink2, 0.15); g.fill(); g.strokeStyle = C.ink2; g.lineWidth = 1; g.stroke();
+      g.strokeStyle = C.ink; g.lineWidth = 2; line(g, it.key[0][0], it.key[0][1], it.key[1][0], it.key[1][1]);
+    } else if (it.q) {
+      g.strokeStyle = shade(it.rgb, it.z); g.lineWidth = it.w * (it.p[3] + it.q[3]) / 2; g.lineCap = 'round';
+      line(g, it.p[0], it.p[1], it.q[0], it.q[1]);
+    } else {
+      g.beginPath(); g.arc(it.p[0], it.p[1], it.r * it.p[3], 0, TAU);
+      g.fillStyle = shade(WHITE, it.z); g.fill(); g.strokeStyle = 'rgba(0,0,0,.45)'; g.lineWidth = 0.8; g.stroke();
+    }
+  };
+  items.sort((u, v) => u.z - v.z);
+  for (const it of items) if (!it.front) drawIt(it);
+
+  // face da frente do estator (translúcida) e núcleo do rotor
+  g.beginPath();
+  for (let k = 0; k <= 72; k++) { const p = P2(GEO.Rso, k * 5 * DEG); k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }
+  INNER.forEach(([r, a], k) => { const p = P2(r, a); k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); });
+  g.closePath();
+  g.globalAlpha = 0.72; g.fillStyle = C.stator; g.fill('evenodd'); g.globalAlpha = 1;
+  g.strokeStyle = C.axis; g.lineWidth = 1; g.stroke();
+  const disc = []; for (let k = 0; k < 60; k++) disc.push(P2(GEO.Rr, k * TAU / 60));
+  poly(g, disc); g.globalAlpha = 0.3; g.fillStyle = C.stator; g.fill(); g.globalAlpha = 1; g.strokeStyle = C.axis; g.lineWidth = 1; g.stroke();
+
+  // entreferro: verde onde o fluxo é forte (debaixo dos polos N e S), com a intensidade do fluxo do rotor
+  {
+    const N = 120;
+    for (let k = 0; k < N; k++) {
+      const a0 = k * TAU / N, a1 = a0 + TAU / N + 0.006, am = a0 + Math.PI / N;
+      const t = clamp(phi * Math.abs(Math.cos(am - theta)), 0, 1);
+      poly(g, [P2(0.535, a0), P2(0.625, a0), P2(0.625, a1), P2(0.535, a1)]);
+      g.fillStyle = mix(C.mid, C.flux, t); g.fill();
+    }
+    if (phi > 0.06) {
+      label(g, 'N', ...P2(0.58, theta), C.surface, 12, 700);
+      label(g, 'S', ...P2(0.58, theta + Math.PI), C.surface, 12, 700);
+    }
+  }
+
+  for (const it of items) if (it.front) drawIt(it);
+
+  // ---- por cima, no plano da face: fases, eixos d e q e os vetores ----
+  for (const [ph, a] of PHASES) label(g, ph, ...P2(1.07, a * DEG), C.muted, 13, 600);
+
+  // duas setas curvas no topo: sentido da rotação (cinzento) e do binário (vermelho).
+  // Ficam paradas no ecrã mesmo na vista do fluxo. Opostas = o motor está a travar.
+  const scr = a => a + (st.frame ? theta : 0);
+  const curved = (r, sgn, color, w) => {
+    const a0 = 90 * DEG - sgn * 30 * DEG, a1 = 90 * DEG + sgn * 30 * DEG, pts = [];
+    for (let k = 0; k <= 24; k++) pts.push(P2(r, scr(a0 + (a1 - a0) * k / 24)));
+    g.strokeStyle = color; g.lineWidth = w; g.lineCap = 'round'; poly(g, pts.slice(0, -2), false); g.stroke();
+    arrow(g, pts[pts.length - 4], pts[pts.length - 1], color, w, false);
+  };
+  const T = torque(), wr = omega / W_MAX;
+  if (Math.abs(wr) > 0.02) curved(1.17, Math.sign(wr), C.ink2, 2 + 4 * Math.min(1, Math.abs(wr)));
+  if (Math.abs(T) > 0.02) curved(1.28, Math.sign(T), C.is, 2 + 6 * Math.min(1, Math.abs(T)));
+
+  g.setLineDash([5, 5]); g.lineWidth = 1.3; g.strokeStyle = C.ink2;
+  line(g, ...P2(0.98, theta + Math.PI), ...P2(0.98, theta));
+  line(g, ...P2(0.98, theta + 1.5 * Math.PI), ...P2(0.98, theta + Math.PI / 2));
+  g.setLineDash([]);
+  label(g, 'd', ...P2(1.08, theta), C.ink, 15, 700);
+  label(g, 'q', ...P2(1.08, theta + Math.PI / 2), C.ink, 15, 700);
+
+  // fluxo do rotor: faixa larga e translúcida ao longo de d
+  if (phi > 0.02) {
+    g.globalAlpha = 0.5; arrow(g, XY(0, 0), DQ(KF * phi, 0), C.flux, 15, false); g.globalAlpha = 1;
+    labelSub(g, 'φ', 'r', ...DQ(KF * phi + 0.085, st.iq >= 0 ? -0.06 : 0.06), C.flux, 18);
+  }
+
+  const id = st.id, iq = st.iq, sgq = iq >= 0 ? 1 : -1;
+  // linhas que fecham o paralelogramo
+  if (Math.abs(iq) > 0.02 && id > 0.02) {
+    g.setLineDash([4, 4]); g.strokeStyle = C.muted; g.lineWidth = 1.2;
+    line(g, ...DQ(K * id, 0), ...DQ(K * id, K * iq));
+    line(g, ...DQ(0, K * iq), ...DQ(K * id, K * iq));
+    g.setLineDash([]);
+  }
+  if (id > 0.02) {
+    arrow(g, XY(0, 0), DQ(K * id, 0), C.id, 5, true);
+    labelSub(g, 'i', 'd', ...DQ(K * id * 0.5, -sgq * 0.075), C.id, 17);
+  }
+  if (Math.abs(iq) > 0.02) {
+    arrow(g, XY(0, 0), DQ(0, K * iq), C.iq, 5, true);
+    labelSub(g, 'i', 'q', ...DQ(-0.08, K * iq * 0.5), C.iq, 17);
+  }
+  if (Math.hypot(id, iq) > 0.02) {
+    const o = XY(0, 0), tip = DQ(K * id, K * iq), L = Math.hypot(tip[0] - o[0], tip[1] - o[1]) || 1;
+    arrow(g, o, tip, C.is, 5.5, true);
+    labelSub(g, 'i', 's', tip[0] + (tip[0] - o[0]) / L * 19, tip[1] + (tip[1] - o[1]) / L * 19, C.is, 17);
+  }
+}
+
+// rodar e aproximar com o rato
+let drag = null;
+mcv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, yaw: cam.yaw, pitch: cam.pitch }; camTarget = null; mcv.setPointerCapture(e.pointerId); });
+mcv.addEventListener('pointermove', e => {
+  if (!drag) return;
+  cam.yaw = clamp(drag.yaw + (e.clientX - drag.x) * 0.008, -1.4, 1.4);
+  cam.pitch = clamp(drag.pitch + (e.clientY - drag.y) * 0.008, -1.2, 1.2);
+  camButtons();
+});
+mcv.addEventListener('pointerup', () => { drag = null; });
+mcv.addEventListener('wheel', e => { e.preventDefault(); cam.zoom = clamp(cam.zoom * Math.exp(-e.deltaY * 0.001), 0.6, 2.5); }, { passive: false });
+mcv.addEventListener('dblclick', () => setCam(CAM3D));
+function setCam(t) { camTarget = { ...t }; }
+function camStep(dt) {
+  if (!camTarget) return;
+  const u = Math.min(1, dt * 7);
+  for (const k of ['yaw', 'pitch', 'zoom']) cam[k] += (camTarget[k] - cam[k]) * u;
+  if (Math.abs(cam.yaw - camTarget.yaw) + Math.abs(cam.pitch - camTarget.pitch) + Math.abs(cam.zoom - camTarget.zoom) < 1e-3) { Object.assign(cam, camTarget); camTarget = null; }
+  camButtons();
+}
+function camButtons() {
+  const t = camTarget || cam, fr = Math.abs(t.yaw) < 0.02 && Math.abs(t.pitch) < 0.02, d3 = Math.abs(t.yaw - CAM3D.yaw) < 0.02 && Math.abs(t.pitch - CAM3D.pitch) < 0.02;
+  $('#cFr').classList.toggle('on', fr); $('#c3d').classList.toggle('on', d3);
+}
+$('#c3d').addEventListener('click', () => setCam(CAM3D));
+$('#cFr').addEventListener('click', () => setCam(CAMFR));
+
+// ---------- comandos ----------
+function speedUI() {
+  $('#spd').value = st.tscale;
+  $('#spdOut').textContent = st.tscale <= 0 ? tr('stopped') : pct(st.tscale);
+  const fixed = st.tscale <= 0;
+  $('#fix').textContent = fixed ? tr('resume') : tr('fix');
+  $('#fix').classList.toggle('on', fixed);
+}
+$('#spd').addEventListener('input', e => { st.tscale = +e.target.value; if (st.tscale > 0) st.saved = st.tscale; speedUI(); });
+function toggleFix() {
+  if (st.tscale > 0) { st.saved = st.tscale; st.tscale = 0; } else st.tscale = st.saved > 0 ? st.saved : 1;
+  speedUI();
+}
+$('#fix').addEventListener('click', toggleFix);
+$('#id').addEventListener('input', e => { st.id = +e.target.value / 100; $('#idOut').textContent = pct(st.id); });
+$('#iq').addEventListener('input', e => { st.iq = +e.target.value / 100; $('#iqOut').textContent = pct(st.iq); });
+function setView(frame) {
+  st.frame = frame;
+  $('#vS').classList.toggle('on', !frame); $('#vF').classList.toggle('on', frame);
+}
+$('#vS').addEventListener('click', () => setView(false));
+$('#vF').addEventListener('click', () => setView(true));
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && !['INPUT', 'SELECT', 'BUTTON', 'TEXTAREA'].includes(e.target.tagName)) { e.preventDefault(); toggleFix(); }
+});
+try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readColors); } catch (e) {}
+new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+// ---------- barras e frase ----------
+function updateOut() {
+  const T = torque();
+  $('#phiBar').style.width = (clamp(phi, 0, 1) * 100) + '%';
+  $('#phiTick').style.left = (st.id * 100) + '%';
+  $('#phiOut').textContent = pct(phi);
+  const tb = $('#tBar'), a = clamp(T, -1, 1);
+  tb.style.left = (50 + Math.min(0, a) * 50) + '%';
+  tb.style.width = (Math.abs(a) * 50) + '%';
+  $('#tOut').textContent = pct(T);
+  const wr = clamp(omega / W_MAX, -1, 1), wb = $('#wBar');
+  wb.style.left = (50 + Math.min(0, wr) * 50) + '%';
+  wb.style.width = (Math.abs(wr) * 50) + '%';
+  $('#wOut').textContent = pct(wr);
+
+  // a frase olha primeiro para o que se vê no motor: travar, inverter, acelerar, regime
+  const moving = Math.abs(wr) > 0.03, acc = T - B * omega;
+  let k = 'ok', key;
+  if (Math.abs(st.id - phi) > 0.03) {
+    k = 'wait'; key = 'wait';
+  } else if (Math.abs(T) < 0.02) {
+    k = 'none'; key = phi < 0.05 ? 'noFlux' : moving ? 'coast' : 'idle';
+  } else if (moving && Math.sign(T) !== Math.sign(wr)) {
+    k = 'brake'; key = 'brake';
+  } else if (T < 0) {
+    key = 'reversed';
+  } else if (Math.abs(acc) > 0.03) {
+    key = acc > 0 ? 'accel' : 'decel';
+  } else {
+    key = 'steady';
+  }
+  const v = $('#verdict'); v.dataset.k = k; v.textContent = tr(key);
+
+  $('#capView').textContent = st.tscale <= 0 ? tr('capFixed') : st.frame ? tr('capFlux') : tr('capStator');
+}
+
+// troca de língua: o português original fica guardado em cada elemento na primeira troca
+function applyLang() {
+  document.querySelectorAll('[data-t]').forEach(el => {
+    if (el.dataset.pt === undefined) el.dataset.pt = el.innerHTML;
+    el.innerHTML = lang === 'en' ? EN[el.dataset.t] : el.dataset.pt;
+  });
+  document.documentElement.lang = lang === 'en' ? 'en' : 'pt-PT';
+  document.title = tr('title');
+  mcv.setAttribute('aria-label', tr('aria'));
+  $('#phiTick').title = tr('tick');
+  const b = $('#lang'); b.textContent = tr('langBtn'); b.setAttribute('aria-label', tr('langAria'));
+  b.lang = lang === 'en' ? 'pt-PT' : 'en';
+  speedUI();
+  $('#idOut').textContent = pct(st.id);
+  $('#iqOut').textContent = pct(st.iq);
+  updateOut();
+}
+$('#lang').addEventListener('click', () => {
+  lang = lang === 'en' ? 'pt' : 'en';
+  try { localStorage.setItem('cv-lang', lang); } catch (e) {}
+  try { history.replaceState(null, '', lang === 'en' ? '#en' : location.pathname + location.search); } catch (e) {}
+  applyLang();
+});
+window.addEventListener('hashchange', () => {
+  const want = location.hash === '#en' ? 'en' : 'pt';
+  if (want !== lang) { lang = want; applyLang(); }
+});
+
+// ---------- arranque ----------
+readColors();
+applyLang();   // também escreve os comandos, as barras e a frase
+let last = performance.now(), lastOut = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  const dts = dt * st.tscale;
+  step(dts);
+  camStep(dt);
+  drawMotor(phases(theta, st.id, st.iq), dts);
+  if (now - lastOut > 80) { updateOut(); lastOut = now; }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
